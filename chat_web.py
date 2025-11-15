@@ -1,133 +1,246 @@
-# 对话网页模块
-import flet as ft
-from flet_core import Image as ImageW
-from flet_core import Row
+import logging
+from flask import Flask, request, render_template_string, jsonify, send_from_directory
 from llm import *
 from tts import *
 
-
-def get_head(head_name):  # 获取头像
-    head_path = f"data/image/ch/{head_name}.png"
-    if os.path.exists(head_path):
-        return head_path
-    else:
-        return "data/image/logo.png"
+app = Flask(__name__)
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+web_chat_history = []
 
 
-class Message:  # 对话消息
-    def __init__(self, user_name2: str, text: str, message_type: str):
-        self.user_name2 = user_name2
-        self.text = text
-        self.message_type = message_type
+@app.route('/data/image/<path:filename>')
+def serve_image(filename):
+    return send_from_directory("data/image", filename)
 
 
-class ChatMessage(ft.Row):  # 对话消息
-    def __init__(self, message: Message):
-        super().__init__()
-        self.vertical_alignment = ft.CrossAxisAlignment.START
-        self.controls = [
-            ft.CircleAvatar(content=ImageW(get_head(message.user_name2), width=50, height=50)),
-            ft.Column([ft.Text(message.user_name2, weight=ft.FontWeight.BOLD, size=20),
-                       ft.TextField(value=message.text, read_only=True, focused_bgcolor="#ebebeb",
-                                    border=ft.InputBorder.NONE, max_lines=100, filled=True, border_radius=2)],
-                      tight=True, spacing=5, )]
+@app.route('/dist/assets/image/<path:filename>')
+def serve_bg_image(filename):
+    return send_from_directory("dist/assets/image", filename)
 
 
-def web_main(page: ft.Page):  # 网页主函数
-    page.horizontal_alignment = ft.CrossAxisAlignment.STRETCH
-    page.title = "对话 - 枫云AI虚拟伙伴Web版"
-    logo_image = ImageW("data/image/logo.png", width=25, height=25)
-    title_label = ft.Text(value="枫云AI虚拟伙伴Web版", size=22, color="#587EF4")
-    ip_label1 = ft.Text(value=f"2D角色网址: http://{server_ip}:{live2d_port}", size=16)
-    ip_label2 = ft.Text(value=f"3D角色网址: http://{server_ip}:{mmd_port}", size=16)
-    open_ch_2d_bt = ft.ElevatedButton(text="打开2D角色(主机)", on_click=open_ch_2d)
-    open_ch_3d_bt = ft.ElevatedButton(text="打开3D角色(主机)", on_click=open_ch_3d)
-    row1 = Row([logo_image, title_label])
-    page.add(row1)
-    row2 = Row([ip_label1, open_ch_2d_bt])
-    page.add(row2)
-    row3 = Row([ip_label2, open_ch_3d_bt])
-    page.add(row3)
+@app.route("/", methods=["GET", "POST"])
+def index():
+    global web_chat_history
+    if request.method == "POST":
+        data = request.get_json()
+        action = data.get("action")
+        if action == "poll":
+            return jsonify(web_chat_history)
+        elif action == "send":
+            user_text = data.get("text", "").strip()
+            if not user_text:
+                return jsonify({"error": "请输入内容"})
+            web_chat_history.append((username, user_text))  # 立即显示用户消息
+            Thread(target=handle_bot_reply, args=(user_text,), daemon=True).start()  # 异步处理虚拟伙伴的回复
+            return jsonify(web_chat_history)
+        elif action == "clear":
+            web_chat_history = []
+            return jsonify({"status": "success"})
+    html = '''
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>对话 - 枫云AI虚拟伙伴Web版</title>
+        <link rel="icon" href="/data/image/logo.png" type="image/png">
+        <style>
+        body{font-family:'Arial',sans-serif;margin:0;padding:0;background-color:#f5f7fa;color:#333;
+            background-image: url('/dist/assets/image/bg.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            position: relative;
+        }
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(245, 247, 250, 0.25);
+            z-index: -1;
+        }
+        .header{background-color:rgba(88, 126, 244, 0.25);color:white;padding:15px 20px;box-shadow:0 2px 5px rgba(0,0,0,0.1);position:relative;}
+        .header h1{margin:0;font-size:24px;font-weight:600;display:inline-flex;align-items:center;}
+        .header-logo{width:32px;height:32px;margin-right:10px;vertical-align:middle;}
+        .header-info{margin-top:10px;font-size:14px;}
+        .header-info a{color:#fff;text-decoration:none;margin-right:10px;background-color:rgba(255,255,255,0.15);padding:5px 10px;border-radius:4px;transition:background-color 0.3s;}
+        .header-info a:hover{background-color:rgba(255,255,255,0.25);}
+        .header-info button{background-color:rgba(255,255,255,0.25);border:none;color:white;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:10px;transition:background-color 0.3s;}
+        .header-info button:hover{background-color:rgba(255,255,255,0.3);}
+        .chat-container{height:calc(100vh - 180px);overflow-y:auto;padding:15px;background-color:rgba(255, 255, 255, 0.25);margin:10px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
+        .message{margin-bottom:15px;padding:10px 15px;border-radius:18px;max-width:80%;word-wrap:break-word;line-height:1.4;display:flex;align-items:flex-start;}
+        .user-message{background-color:rgba(88, 126, 244, 0.25);color:white;margin-left:auto;border-bottom-right-radius:4px;max-width:33%;}
+        .bot-message{background-color:rgba(240, 242, 245, 0.25);margin-right:auto;border-bottom-left-radius:4px;max-width:33%;}
+        .message-avatar{width:36px;height:36px;border-radius:50%;margin-right:10px;flex-shrink:0;}
+        .user-message .message-avatar{margin-left:10px;margin-right:0;order:2;}
+        .message-content{flex-grow:1;}
+        .message-sender{font-weight:bold;margin-bottom:5px;font-size:14px;}
+        .input-area{position:fixed;bottom:0;left:0;right:0;background-color:rgba(255, 255, 255, 0.25);padding:15px;box-shadow:0 -2px 5px rgba(0,0,0,0.1);display:flex;align-items:center;}
+        #msgInput{flex:1;padding:12px 15px;border:1px solid rgba(221, 221, 221, 0.5);border-radius:24px;outline:none;font-size:16px;margin-right:10px;background-color:rgba(255, 255, 255, 0.5);}
+        #msgInput:focus{border-color:#587EF4;}
+        .send-btn{background-color:rgba(88, 126, 244, 0.25);color:white;border:none;padding:12px 20px;border-radius:24px;cursor:pointer;font-weight:bold;transition:background-color 0.3s;}
+        .send-btn:hover{background-color:rgba(71, 104, 201, 0.3);}
+        .new-chat-btn{background-color:rgba(88, 126, 244, 0.25);color:white;border:none;padding:12px 15px;border-radius:50%;cursor:pointer;font-weight:bold;transition:background-color 0.3s;margin-right:10px;width:45px;height:45px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+        .new-chat-btn:hover{background-color:rgba(71, 104, 201, 0.3);}
+        .mate-avatar{width:40px;height:40px;border-radius:50%;margin-right:10px;vertical-align:middle;}
+        .header-content{display:flex;align-items:center;}
+        .ai-disclaimer {
+            position: fixed;
+            bottom: 70px;
+            left: 15px;
+            font-size: 12px;
+            color: #666;
+            z-index: 10;
+        }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="header-content">
+                <img class="mate-avatar" src="/data/image/ch/{{ mate_name }}.png" alt="{{ mate_name }}的头像">
+                <div>
+                    <h1>{{ mate_name }}</h1>
+                    <div class="header-info">
+                        <a href="http://{{server_ip}}:{{live2d_port}}" target="_blank">Live2D角色</a>
+                        <a href="http://{{server_ip}}:{{mmd_port}}" target="_blank">MMD 3D角色</a>
+                        <a href="http://{{server_ip}}:{{mmd_port}}/vmd" target="_blank">MMD 3D动作</a>
+                        <a href="http://{{server_ip}}:{{vrm_port}}" target="_blank">VRM 3D角色</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="chat-container" id="chat"></div>
+        <div class="input-area">
+            <button class="new-chat-btn" onclick="clearChat()" title="开启新对话">+</button>
+            <input id="msgInput" placeholder="和{{ mate_name }}聊天...">
+            <button class="send-btn" onclick="sendMsg()">发送</button>
+        </div>
+        <div class="ai-disclaimer">内容由AI生成,请仔细甄别</div>
+        <script>
+            let userName = "{{ username }}";
+            let mateName = "{{ mate_name }}";
+            setInterval(() => {
+                fetch("/", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({action: "poll"})
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if(Array.isArray(data)) {
+                        const chat = document.getElementById("chat");
+                        chat.innerHTML = "";
+                        data.forEach(([who, text]) => {
+                            const messageDiv = document.createElement("div");
+                            messageDiv.className = who === userName ? "message user-message" : "message bot-message";
+                            const avatarImg = document.createElement("img");
+                            avatarImg.className = "message-avatar";
+                            avatarImg.alt = who + "的头像";
+                            avatarImg.src = who === userName 
+                                ? "/data/image/ch/" + userName + ".png" 
+                                : "/data/image/ch/" + mateName + ".png";
+                            const contentDiv = document.createElement("div");
+                            contentDiv.className = "message-content";
+                            const senderDiv = document.createElement("div");
+                            senderDiv.className = "message-sender";
+                            senderDiv.textContent = who;
+                            const textDiv = document.createElement("div");
+                            textDiv.innerHTML = text.replace(/\\n/g, "<br>");
+                            contentDiv.appendChild(senderDiv);
+                            contentDiv.appendChild(textDiv);
+                            messageDiv.appendChild(avatarImg);
+                            messageDiv.appendChild(contentDiv);
+                            chat.appendChild(messageDiv);
+                        });
+                        chat.scrollTop = chat.scrollHeight;
+                    }
+                });
+            }, 1000);
+            function sendMsg() {
+                const text = document.getElementById("msgInput").value.trim();
+                if(!text) { 
+                    alert("请输入内容"); 
+                    return; 
+                }
+                fetch("/", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({action: "send", user: userName, text: text})
+                })
+                .then(r => r.json())
+                .then(() => {
+                    document.getElementById("msgInput").value = "";
+                });
+            }
+            function clearChat() {
+                if (confirm("确定要清空网页聊天记录吗？")) {
+                    fetch("/", {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({action: "clear"})
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.status === "success") {
+                            const chat = document.getElementById("chat");
+                            chat.innerHTML = "";
+                        }
+                    });
+                }
+            }
+            document.getElementById("msgInput").addEventListener("keydown", e => {
+                if(e.key === "Enter" && !e.shiftKey) { 
+                    e.preventDefault(); 
+                    sendMsg(); 
+                }
+            });
+        </script>
+    </body>
+    </html>'''
+    return render_template_string(html, server_ip=server_ip, live2d_port=live2d_port, mmd_port=mmd_port,
+                                  vrm_port=vrm_port, username=username, mate_name=mate_name)
 
-    def join_chat_click(e):  # 加入对话
-        if not join_user_name.value:
-            join_user_name.error_text = "名称不能为空!"
-            join_user_name.update()
-        elif join_password.value != password:
-            join_password.error_text = "密码错误"
-            join_password.update()
-        else:
-            page.session.set("user_name2", join_user_name.value)
-            page.dialog.open = False
-            new_message.prefix = ft.Text(f"{join_user_name.value}: ")
-            page.pubsub.send_all(
-                Message(user_name2=join_user_name.value, text=f"{join_user_name.value} 加入了聊天",
-                        message_type="login_message"))
-            page.update()
 
-    def send_message_click(e):  # 发送消息
-        user_name2 = page.session.get("user_name2")
-        user_message = new_message.value.strip()
-        if user_message == "":
-            state.value = "请输入内容后再发送"
-            page.update()
-            return
-        state.value = f"消息已发送，{mate_name}正在思考中..."
-        page.pubsub.send_all(Message(user_name2=user_name2, text=user_message, message_type="chat_message"))
-        new_message.value = ""
-        new_message.focus()
-        bot_response = chat_llm(prompt, user_message)
-        bot_response = bot_response.replace("#", "").replace("*", "")
-        if think_filter_switch == "开启":
-            bot_response = bot_response.split("</think>")[-1].strip()
-        state.value = f"收到{mate_name}回复"
-        page.pubsub.send_all(Message(user_name2=mate_name, text=bot_response, message_type="chat_message"))
-        get_tts_play_live2d(bot_response)
+# open_source_project_address:https://github.com/swordswind/ai_virtual_mate_web
+def handle_bot_reply(user_text):
+    global web_chat_history
+    bot_reply = chat_llm(user_text)
+    bot_reply = bot_reply.replace("#", "").replace("*", "")
+    web_chat_history.append((mate_name, bot_reply))
+    get_tts_play(bot_reply)
 
-    def export_chat2(e):  # 导出对话
-        messages = []
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        ch = [username, mate_name]
-        for control in chat.controls:
-            if isinstance(control, ChatMessage):
-                messages.append(ch[0] + ":\n" + control.controls[1].controls[1].value)
-                ch.reverse()
-        file_path = f'data/history/枫云AI虚拟伙伴Web版{mate_name}对话记录{timestamp}.txt'
-        with open(file_path, 'w', encoding='utf-8') as file3:
-            for message in messages:
-                file3.write(message + '\n\n')
-        state.value = f"对话已成功导出至data/history/枫云AI虚拟伙伴Web版{mate_name}对话记录{timestamp}.txt"
-        page.update()
 
-    def clean_chat(e):  # 清空对话
-        chat.controls.clear()
-        clean_chat_web()
-        state.value = "记录和上下文记忆已清空"
-        page.update()
+def run_chatweb():
+    app.run(host="0.0.0.0", port=chatweb_port)
 
-    def on_message(message: Message):  # 对话消息
-        m = None
-        if message.message_type == "chat_message":
-            m = ChatMessage(message)
-        elif message.message_type == "login_message":
-            m = ft.Text(message.text, italic=True, color=ft.colors.GREEN, size=12)
-        chat.controls.append(m)
-        page.update()
 
-    page.pubsub.subscribe(on_message)
-    join_user_name = ft.TextField(label="用户名", value=username, autofocus=True, on_submit=join_chat_click)
-    join_password = ft.TextField(label="密码", value="", autofocus=True, password=True)
-    page.dialog = ft.AlertDialog(open=True, modal=True, title=ft.Text("枫云AI虚拟伙伴Web版"),
-                                 content=ft.Column([join_user_name, join_password], width=300, height=120, tight=True),
-                                 actions=[ft.ElevatedButton(text="登录", on_click=join_chat_click)],
-                                 actions_alignment=ft.MainAxisAlignment.END)
-    chat = ft.ListView(expand=True, spacing=10, auto_scroll=True)
-    new_message = ft.TextField(hint_text="请输入消息...", autofocus=True, shift_enter=True, min_lines=1,
-                               max_lines=5, filled=True, expand=True, on_submit=send_message_click)
-    page.add(ft.Container(
-        content=chat, border=ft.border.all(1, ft.colors.OUTLINE), border_radius=5, padding=10, expand=True),
-        ft.Row([ft.IconButton(icon=ft.icons.DOWNLOAD_ROUNDED, tooltip="导出记录", on_click=export_chat2),
-                ft.IconButton(icon=ft.icons.ADD_ROUNDED, tooltip="开启新对话", on_click=clean_chat), new_message,
-                ft.IconButton(icon=ft.icons.SEND_ROUNDED, tooltip="发送消息", on_click=send_message_click)]))
-    state = ft.Text("欢迎使用枫云AI虚拟伙伴Web版")
-    page.add(state)
+app_pet = Flask(__name__)
+
+
+@app_pet.get('/pet_chat')
+def pet_chat():
+    if asr_menu.get() == "实时语音识别" and tts_menu.get() != "关闭语音合成":
+        return jsonify({"error": "请关闭实时语音识别或关闭语音合成后\n再打字发送"}), 500
+    msg = request.args.get('msg')
+    key = request.args.get('key')
+    if not msg:
+        return jsonify({"error": "缺少msg参数"}), 400
+    if not key or key != 'desktoppetchat':
+        return jsonify({"error": "无效的key参数"}), 401
+    try:
+        answer = chat_preprocess(msg)
+        get_tts_play(answer)
+        return jsonify({"answer": answer})
+    except Exception as e:
+        return jsonify({"error": f"处理请求时出错: {e}"}), 500
+
+
+def run_pet_chat():
+    app_pet.run(host='127.0.0.1', port=5249)
+
+
+Thread(target=run_pet_chat).start()

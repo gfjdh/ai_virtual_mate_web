@@ -1,38 +1,30 @@
-# 主程序
-import keyboard as kb
-from chat_web import *
-from live2d import *
-from mmd import *
+from main_sub import common_chat, run_ase_rp, run_ase_agent
+from live2d import run_live2d
+from mmd import run_mmd
+from vrm import *
 
 
-def refresh_preference():  # 获取用户设置
+def refresh_preference():  # 刷新用户偏好
     while True:
         try:
-            history2 = output_box.get(1.0, "end").strip() + "\n"
-            preference = {"语音识别模式": voice_option_menu.get(), "对话语言模型": llm_menu.get(),
-                          "语音合成引擎": tts_menu.get(), "图像识别引擎": img_menu.get()}
-            with open('data/db/preference.json', 'w', encoding='utf-8') as file2:
-                json.dump(preference, file2, ensure_ascii=False, indent=4)
-            with open(f'data/db/history.db', 'w', encoding='utf-8') as file3:
-                file3.write(history2)
+            new_preference = {"语音识别模式": asr_menu.get(), "对话语言模型": llm_menu.get(),
+                              "语音合成引擎": tts_menu.get(), "图像识别引擎": img_menu.get(),
+                              "主动感知对话": ase_menu.get(), "运行模式切换": mode_menu.get()}
+            with open('data/db/preference.json', 'w', encoding='utf-8') as f:
+                json.dump(new_preference, f, ensure_ascii=False, indent=4)
+            with open(f'data/db/history.db', 'w', encoding='utf-8') as f:
+                f.write(output_box.get(1.0, "end").strip() + "\n")
         except:
-            pass
+            print("用户偏好保存错误")
         time.sleep(0.1)
 
 
-def run_chatweb():  # 运行对话网页
-    try:
-        ft.app(target=web_main, assets_dir="data", view=ft.WEB_BROWSER, port=chatweb_port)
-    except:
-        pass
-
-
-def text_chat(event=None):  # 发送消息
+def text_chat(event=None):  # 打字发送
     def text_chat_th():
-        pg.quit()
+        stop_tts()
         msg = input_box.get("1.0", "end").strip()
-        if voice_option_menu.get() == "实时语音识别":
-            messagebox.showinfo("提示", "请关闭实时语音识别后\n再打字发送")
+        if asr_menu.get() == "实时语音识别" and tts_menu.get() != "关闭语音合成":
+            messagebox.showinfo("提示", "请关闭实时语音识别或关闭语音合成后\n再打字发送")
             return
         if msg == "":
             messagebox.showinfo("提示", "请输入内容后再发送")
@@ -43,33 +35,21 @@ def text_chat(event=None):  # 发送消息
     Thread(target=text_chat_th).start()
 
 
-def common_chat(msg):  # 通用对话
-    output_box.insert("end", f"\n{username}:\n    {msg}\n")
-    output_box.see("end")
-    notice(f"消息已发送，{mate_name}正在思考中...")
-    bot_response = chat_preprocess(msg)
-    bot_response = bot_response.replace("#", "").replace("*", "")
-    if think_filter_switch == "开启":
-        bot_response = bot_response.split("</think>")[-1].strip()
-    stream_insert(f"{mate_name}:\n    {bot_response}\n")
-    get_tts_play_live2d(bot_response)
-
-
-def sensevoice_th():  # 语音识别(普通模式)
+def sense_voice_th():  # 语音识别(普通模式)
     from asr import recognize_audio, record_audio
     while True:
         try:
-            if voice_option_menu.get() == "实时语音识别" or voice_option_menu.get() == "自定义唤醒词":
-                pg.init()
+            if asr_menu.get() == "实时语音识别" or asr_menu.get() == "自定义唤醒词":
+                pg.mixer.init()
                 if pg.mixer.music.get_busy():
-                    pass
+                    time.sleep(0.1)
                 else:
                     say_text = recognize_audio(record_audio())
-                    if len(say_text) > 1 and voice_option_menu.get() == "实时语音识别":
+                    if len(say_text) > 1 and asr_menu.get() == "实时语音识别":
                         common_chat(say_text)
-                    elif wake_word in say_text and voice_option_menu.get() == "自定义唤醒词":
+                    elif wake_word in say_text and asr_menu.get() == "自定义唤醒词":
                         if len(say_text) > 2:
-                            say_text = say_text.replace(wake_word, "")
+                            say_text = say_text.replace(wake_word + "，", "").replace(wake_word, "")
                         common_chat(say_text)
             else:
                 time.sleep(0.1)
@@ -77,19 +57,19 @@ def sensevoice_th():  # 语音识别(普通模式)
             time.sleep(0.1)
 
 
-def sensevoice_th_break():  # 语音识别(实时语音打断模式)
+def sense_voice_th_break():  # 语音识别(实时语音打断模式)
     from asr import recognize_audio, record_audio
     while True:
         try:
-            if voice_option_menu.get() == "实时语音识别" or voice_option_menu.get() == "自定义唤醒词":
+            if asr_menu.get() == "实时语音识别" or asr_menu.get() == "自定义唤醒词":
                 say_text = recognize_audio(record_audio())
-                if len(say_text) > 1 and voice_option_menu.get() == "实时语音识别":
-                    pg.quit()
+                if len(say_text) > 1 and asr_menu.get() == "实时语音识别":
+                    stop_tts()
                     common_chat(say_text)
-                elif wake_word in say_text and voice_option_menu.get() == "自定义唤醒词":
+                elif wake_word in say_text and asr_menu.get() == "自定义唤醒词":
                     if len(say_text) > 2:
-                        say_text = say_text.replace(wake_word, "")
-                    pg.quit()
+                        say_text = say_text.replace(wake_word + "，", "").replace(wake_word, "")
+                    stop_tts()
                     common_chat(say_text)
             else:
                 time.sleep(0.1)
@@ -97,58 +77,71 @@ def sensevoice_th_break():  # 语音识别(实时语音打断模式)
             time.sleep(0.1)
 
 
-def switch_voice(event=None):  # 切换语音识别
-    if voice_option_menu.get() == "实时语音识别":
+# open_source_project_address:https://github.com/swordswind/ai_virtual_mate_web
+def switch_voice(event=None):  # 切换语音模式
+    if asr_menu.get() == "实时语音识别":
         voice_var.set("关闭语音识别")
-    elif voice_option_menu.get() == "关闭语音识别":
+    elif asr_menu.get() == "关闭语音识别":
         voice_var.set("实时语音识别")
 
 
-Thread(target=run_live2d).start()
-Thread(target=run_mmd).start()
 if chat_web_switch == "开启":
     Thread(target=run_chatweb).start()
 if voice_break == "开启":
-    Thread(target=sensevoice_th_break).start()
+    Thread(target=sense_voice_th_break).start()
 else:
-    Thread(target=sensevoice_th).start()
+    Thread(target=sense_voice_th).start()
+Thread(target=run_live2d).start()
+Thread(target=run_mmd).start()
+Thread(target=run_vrm).start()
 Thread(target=refresh_preference).start()
+Thread(target=run_ase_rp).start()
+Thread(target=run_ase_agent).start()
 input_box.bind('<Return>', text_chat)
-kb.add_hotkey('alt+g', pg.quit)
+kb.add_hotkey('alt+g', stop_tts)
 try:
     kb.add_hotkey(f'alt+{voice_key}', switch_voice)
 except:
-    pass
+    print("语音模式切换按键设置错误")
 wydh_icon = Image.open("data/image/ui/wydh.png")
-wydh_icon = wydh_icon.resize((int(150 * scaling_factor), int(35 * scaling_factor)), Image.Resampling.LANCZOS)
+wydh_icon = wydh_icon.resize((int(100 * scaling_factor), int(23 * scaling_factor)), Image.Resampling.LANCZOS)
 wydh_icon = ImageTk.PhotoImage(wydh_icon)
-Button(root, image=wydh_icon, command=open_chatweb, borderwidth=0, highlightthickness=0).place(relx=0.74, rely=0.01)
-js2d_icon = Image.open("data/image/ui/js2d.png")
-js2d_icon = js2d_icon.resize((int(150 * scaling_factor), int(35 * scaling_factor)), Image.Resampling.LANCZOS)
-js2d_icon = ImageTk.PhotoImage(js2d_icon)
-Button(root, image=js2d_icon, command=lambda: wb.open(f"http://127.0.0.1:{live2d_port}"), borderwidth=0,
-       highlightthickness=0).place(relx=0.74, rely=0.07)
-dz3d_icon = Image.open("data/image/ui/dz3d.png")
-dz3d_icon = dz3d_icon.resize((int(150 * scaling_factor), int(35 * scaling_factor)), Image.Resampling.LANCZOS)
-dz3d_icon = ImageTk.PhotoImage(dz3d_icon)
-Button(root, image=dz3d_icon, command=open_vmd_music, borderwidth=0, highlightthickness=0).place(relx=0.87, rely=0.01)
-js3d_icon = Image.open("data/image/ui/js3d.png")
-js3d_icon = js3d_icon.resize((int(150 * scaling_factor), int(35 * scaling_factor)), Image.Resampling.LANCZOS)
-js3d_icon = ImageTk.PhotoImage(js3d_icon)
-Button(root, image=js3d_icon, command=lambda: wb.open(f"http://127.0.0.1:{mmd_port}"), borderwidth=0,
-       highlightthickness=0).place(relx=0.87, rely=0.07)
+Button(root, image=wydh_icon, command=open_chatweb, borderwidth=0, highlightthickness=0).place(relx=0.18, rely=0.02)
+vrmjs_icon = Image.open("data/image/ui/vrmjs.png")
+vrmjs_icon = vrmjs_icon.resize((int(100 * scaling_factor), int(23 * scaling_factor)), Image.Resampling.LANCZOS)
+vrmjs_icon = ImageTk.PhotoImage(vrmjs_icon)
+Button(root, image=vrmjs_icon, command=lambda: wb.open(f"http://127.0.0.1:{vrm_port}"), borderwidth=0,
+       highlightthickness=0).place(relx=0.27, rely=0.02)
+mmdjs_icon = Image.open("data/image/ui/mmdjs.png")
+mmdjs_icon = mmdjs_icon.resize((int(100 * scaling_factor), int(23 * scaling_factor)), Image.Resampling.LANCZOS)
+mmdjs_icon = ImageTk.PhotoImage(mmdjs_icon)
+Button(root, image=mmdjs_icon, command=lambda: wb.open(f"http://127.0.0.1:{mmd_port}"), borderwidth=0,
+       highlightthickness=0).place(relx=0.36, rely=0.02)
+mmddz_icon = Image.open("data/image/ui/mmddz.png")
+mmddz_icon = mmddz_icon.resize((int(100 * scaling_factor), int(23 * scaling_factor)), Image.Resampling.LANCZOS)
+mmddz_icon = ImageTk.PhotoImage(mmddz_icon)
+Button(root, image=mmddz_icon, command=open_vmd_music, borderwidth=0, highlightthickness=0).place(relx=0.45, rely=0.02)
+live2djs_icon = Image.open("data/image/ui/live2djs.png")
+live2djs_icon = live2djs_icon.resize((int(100 * scaling_factor), int(23 * scaling_factor)), Image.Resampling.LANCZOS)
+live2djs_icon = ImageTk.PhotoImage(live2djs_icon)
+Button(root, image=live2djs_icon, command=lambda: wb.open(f"http://127.0.0.1:{live2d_port}"), borderwidth=0,
+       highlightthickness=0).place(relx=0.54, rely=0.02)
+l2dzc_icon = Image.open("data/image/ui/l2dzc.png")
+l2dzc_icon = l2dzc_icon.resize((int(100 * scaling_factor), int(23 * scaling_factor)), Image.Resampling.LANCZOS)
+l2dzc_icon = ImageTk.PhotoImage(l2dzc_icon)
+Button(root, image=l2dzc_icon, command=open_pet, borderwidth=0, highlightthickness=0).place(relx=0.63, rely=0.02)
 zygl_icon = Image.open("data/image/ui/zygl.png")
-zygl_icon = zygl_icon.resize((int(150 * scaling_factor), int(35 * scaling_factor)), Image.Resampling.LANCZOS)
+zygl_icon = zygl_icon.resize((int(100 * scaling_factor), int(23 * scaling_factor)), Image.Resampling.LANCZOS)
 zygl_icon = ImageTk.PhotoImage(zygl_icon)
-Button(root, image=zygl_icon, command=open_change_w, borderwidth=0, highlightthickness=0).place(relx=0.03, rely=0.15)
+Button(root, image=zygl_icon, command=open_change_w, borderwidth=0, highlightthickness=0).place(relx=0.72, rely=0.02)
 rjsz_icon = Image.open("data/image/ui/rjsz.png")
-rjsz_icon = rjsz_icon.resize((int(150 * scaling_factor), int(41 * scaling_factor)), Image.Resampling.LANCZOS)
+rjsz_icon = rjsz_icon.resize((int(100 * scaling_factor), int(23 * scaling_factor)), Image.Resampling.LANCZOS)
 rjsz_icon = ImageTk.PhotoImage(rjsz_icon)
-Button(root, image=rjsz_icon, command=open_setting_w, borderwidth=0, highlightthickness=0).place(relx=0.03, rely=0.235)
+Button(root, image=rjsz_icon, command=open_setting_w, borderwidth=0, highlightthickness=0).place(relx=0.81, rely=0.02)
 tzbf_icon = Image.open("data/image/ui/tzbf.png")
-tzbf_icon = tzbf_icon.resize((int(150 * scaling_factor), int(39 * scaling_factor)), Image.Resampling.LANCZOS)
+tzbf_icon = tzbf_icon.resize((int(100 * scaling_factor), int(23 * scaling_factor)), Image.Resampling.LANCZOS)
 tzbf_icon = ImageTk.PhotoImage(tzbf_icon)
-Button(root, image=tzbf_icon, command=pg.quit, borderwidth=0, highlightthickness=0).place(relx=0.03, rely=0.32)
+Button(root, image=tzbf_icon, command=stop_tts, borderwidth=0, highlightthickness=0).place(relx=0.9, rely=0.02)
 upphoto_icon = Image.open("data/image/ui/upphoto.png")
 upphoto_icon = upphoto_icon.resize((int(25 * scaling_factor), int(25 * scaling_factor)), Image.Resampling.LANCZOS)
 upphoto_icon = ImageTk.PhotoImage(upphoto_icon)
@@ -165,6 +158,8 @@ send_icon = Image.open("data/image/ui/send.png")
 send_icon = send_icon.resize((int(25 * scaling_factor), int(25 * scaling_factor)), Image.Resampling.LANCZOS)
 send_icon = ImageTk.PhotoImage(send_icon)
 Button(root, image=send_icon, command=text_chat, borderwidth=0, highlightthickness=0).place(relx=0.97, rely=0.945)
+Button(root, text="📱手机网页访问", command=open_web_tips, borderwidth=0, highlightthickness=0).place(relx=0.02,
+                                                                                                     rely=0.13)
 root.protocol("WM_DELETE_WINDOW", on_closing)
 root.mainloop()
 os.kill(os.getpid(), 15)
