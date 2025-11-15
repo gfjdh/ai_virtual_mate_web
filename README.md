@@ -202,17 +202,17 @@ ai_virtual_mate_web/
 
 - 感谢所有贡献者和用户的支持！
 - 虚拟伙伴[小月]Live2D模型版权：Live2D inc.
-- 感谢以下开源项目的支持：
-  - GPT-SoVITS: [https://github.com/RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)
-  - opencv: [https://github.com/opencv/opencv-python](https://github.com/opencv/opencv-python)
-  - FunAudioLLM: [https://github.com/FunAudioLLM](https://github.com/FunAudioLLM)
-  - edge-tts: [https://github.com/rany2/edge-tts](https://github.com/rany2/edge-tts)
-  - Qwen3-VL: [https://github.com/QwenLM/Qwen3-VL](https://github.com/QwenLM/Qwen3-VL)
-  - ollama: [https://github.com/ollama/ollama](https://github.com/ollama/ollama)
-  - flask: [https://github.com/pallets/flask](https://github.com/pallets/flask)
-  - live2d: [https://github.com/nladuo/live2d-chatbot-demo](https://github.com/nladuo/live2d-chatbot-demo)
-  - three.js: [https://github.com/mrdoob/three.js](https://github.com/mrdoob/three.js)
-  - sherpa-onnx: [https://github.com/k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
+- 感谢以下等开源项目的支持：
+  - GPT-SoVITS: https://github.com/RVC-Boss/GPT-SoVITS
+  - opencv: https://github.com/opencv/opencv-python
+  - FunAudioLLM: https://github.com/FunAudioLLM
+  - edge-tts: https://github.com/rany2/edge-tts
+  - Qwen3-VL: https://github.com/QwenLM/Qwen3-VL
+  - ollama: https://github.com/ollama/ollama
+  - flask: https://github.com/pallets/flask
+  - live2d: https://github.com/nladuo/live2d-chatbot-demo
+  - three.js: https://github.com/mrdoob/three.js
+  - sherpa-onnx: https://github.com/k2-fsa/sherpa-onnx
 
 ## 联系开发者团队
 
@@ -220,5 +220,5 @@ ai_virtual_mate_web/
 
 - **Email**: swordswind@qq.com
 - **GitHub**: [swordswind](https://github.com/swordswind)
-- **项目主页**: [https://swordswind.github.io/2024/07/09/mateweb/](https://swordswind.github.io/2024/07/09/mateweb/)
-- **GitHub仓库**: [https://github.com/swordswind/ai_virtual_mate_web
+- **项目主页**: https://swordswind.github.io/2024/07/09/mateweb/
+- **GitHub仓库**: https://github.com/swordswind/ai_virtual_mate_web
